@@ -6,10 +6,16 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
+import org.springframework.dao.DataIntegrityViolationException;
+import org.springframework.http.converter.HttpMessageNotReadableException;
 import org.springframework.web.HttpRequestMethodNotSupportedException;
 import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
+import org.springframework.web.bind.MethodArgumentNotValidException;
+import org.springframework.web.method.annotation.MethodArgumentTypeMismatchException;
 import org.springframework.web.servlet.resource.NoResourceFoundException;
+import vn.rikkei.cinemabox.booking.NotEnoughSeatsException;
+import vn.rikkei.cinemabox.payment.PaymentFailedException;
 
 /**
  * Xử lý lỗi tập trung: chuyển exception thành ApiError.
@@ -23,6 +29,61 @@ public class GlobalExceptionHandler {
     @ExceptionHandler(ResourceNotFoundException.class)
     public ResponseEntity<ApiError> handleNotFound(ResourceNotFoundException ex, HttpServletRequest req) {
         return build(HttpStatus.NOT_FOUND, "NOT_FOUND", ex.getMessage(), req, List.of());
+    }
+
+    @ExceptionHandler(DuplicateException.class)
+    public ResponseEntity<ApiError> handleDuplicate(DuplicateException ex, HttpServletRequest req) {
+        return build(HttpStatus.CONFLICT, "CONFLICT", ex.getMessage(), req, List.of());
+    }
+
+    @ExceptionHandler(NotEnoughSeatsException.class)
+    public ResponseEntity<ApiError> handleNotEnoughSeats(NotEnoughSeatsException ex,
+                                                         HttpServletRequest req) {
+        return build(HttpStatus.CONFLICT, "NOT_ENOUGH_SEATS", ex.getMessage(), req, List.of());
+    }
+
+    @ExceptionHandler(PaymentFailedException.class)
+    public ResponseEntity<ApiError> handlePaymentFailed(PaymentFailedException ex,
+                                                        HttpServletRequest req) {
+        return build(HttpStatus.PAYMENT_REQUIRED, "PAYMENT_FAILED", ex.getMessage(), req, List.of());
+    }
+
+    /** Fallback for a duplicate value rejected by a database UNIQUE constraint. */
+    @ExceptionHandler(DataIntegrityViolationException.class)
+    public ResponseEntity<ApiError> handleDataIntegrity(DataIntegrityViolationException ex,
+                                                        HttpServletRequest req) {
+        return build(HttpStatus.CONFLICT, "CONFLICT", "Dữ liệu đã tồn tại hoặc không hợp lệ", req, List.of());
+    }
+
+    @ExceptionHandler(MethodArgumentNotValidException.class)
+    public ResponseEntity<ApiError> handleValidation(MethodArgumentNotValidException ex,
+                                                     HttpServletRequest req) {
+        List<ApiError.FieldViolation> details = ex.getBindingResult().getFieldErrors().stream()
+                .map(error -> new ApiError.FieldViolation(error.getField(),
+                        error.getDefaultMessage() == null ? "Giá trị không hợp lệ" : error.getDefaultMessage()))
+                .toList();
+        return build(HttpStatus.BAD_REQUEST, "VALIDATION_FAILED",
+                "Dữ liệu đầu vào không hợp lệ", req, details);
+    }
+
+    @ExceptionHandler(HttpMessageNotReadableException.class)
+    public ResponseEntity<ApiError> handleUnreadable(HttpMessageNotReadableException ex,
+                                                     HttpServletRequest req) {
+        return build(HttpStatus.BAD_REQUEST, "BAD_REQUEST",
+                "Body không phải JSON hợp lệ hoặc sai kiểu dữ liệu", req, List.of());
+    }
+
+    @ExceptionHandler(MethodArgumentTypeMismatchException.class)
+    public ResponseEntity<ApiError> handleTypeMismatch(MethodArgumentTypeMismatchException ex,
+                                                       HttpServletRequest req) {
+        return build(HttpStatus.BAD_REQUEST, "BAD_REQUEST",
+                "Tham số không đúng định dạng", req, List.of());
+    }
+
+    @ExceptionHandler(IllegalArgumentException.class)
+    public ResponseEntity<ApiError> handleBadArgument(IllegalArgumentException ex,
+                                                      HttpServletRequest req) {
+        return build(HttpStatus.BAD_REQUEST, "BAD_REQUEST", ex.getMessage(), req, List.of());
     }
 
     /** Gọi tới đường dẫn không có endpoint nào. */
